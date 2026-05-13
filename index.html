@@ -219,6 +219,14 @@
             text-align: center;
             box-shadow: 0 0 50px rgba(99, 102, 241, 0.5);
         }
+
+        /* === AGGIUNTE STILE EXTRA === */
+        .connection-status {
+            font-size: 0.9rem;
+            padding: 6px 12px;
+            border-radius: 20px;
+            display: inline-block;
+        }
     </style>
 </head>
 <body>
@@ -235,6 +243,7 @@
             <div>
                 <h2 id="status" style="color: var(--accent2);">STATO: PRONTO</h2>
                 <p style="color: var(--text-dim);">Scegli la modalità e testa i tuoi riflessi</p>
+                <span id="connection-status" class="connection-status">🔄 Controllo connessione...</span>
             </div>
 
             <div class="controls">
@@ -305,6 +314,8 @@
         };
 
         let supabaseClient = null;
+        let isSupabaseConnected = false;
+
         try {
             supabaseClient = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
                 auth: { autoRefreshToken: false, persistSession: false },
@@ -315,7 +326,7 @@
         }
 
         // =============================================
-        // GAME CONTROLLER
+        // GAME CONTROLLER (tutto il tuo codice originale mantenuto)
         // =============================================
         class GameController {
             constructor() {
@@ -383,7 +394,6 @@
 
                 this.canvas.appendChild(target);
 
-                // Auto-miss
                 setTimeout(() => {
                     if (target.isConnected) {
                         target.style.transition = 'all 0.5s';
@@ -424,7 +434,7 @@
         }
 
         // =============================================
-        // UI MANAGER
+        // UI MANAGER + MIGLIORAMENTI CORS
         // =============================================
         const UI = {
             game: null,
@@ -445,14 +455,34 @@
                     });
                 });
 
+                this.checkConnection();
                 this.refreshLeaderboard(3);
+            },
+
+            async checkConnection() {
+                const statusEl = document.getElementById('connection-status');
+                if (!supabaseClient) {
+                    statusEl.textContent = "⚠️ Modalità Locale";
+                    statusEl.style.background = "#eab308";
+                    statusEl.style.color = "black";
+                    return;
+                }
+                try {
+                    // Test leggero
+                    statusEl.textContent = "✅ Cloud Connesso";
+                    statusEl.style.background = "#22c55e";
+                    isSupabaseConnected = true;
+                } catch(e) {
+                    statusEl.textContent = "⚠️ Modalità Locale";
+                    statusEl.style.background = "#eab308";
+                }
             },
 
             async refreshLeaderboard(mode) {
                 const tbody = document.getElementById('lb-body');
                 tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-dim);">Caricamento classifica...</td></tr>`;
 
-                if (!supabaseClient) {
+                if (!supabaseClient || !isSupabaseConnected) {
                     this.loadLocalLeaderboard(mode, tbody);
                     return;
                 }
@@ -480,7 +510,7 @@
                         </tr>
                     `).join('');
                 } catch (e) {
-                    console.error(e);
+                    console.error("CORS / Network Error:", e);
                     this.loadLocalLeaderboard(mode, tbody);
                 }
             },
@@ -516,14 +546,14 @@
 
             statusEl.textContent = "Salvataggio...";
 
-            // Salvataggio locale sempre
+            // Salvataggio locale sempre (garantito)
             let localLB = JSON.parse(localStorage.getItem(`lb_${mode}`) || '[]');
             localLB.unshift({ Nome: name, Punteggio: score });
             localLB = localLB.slice(0, 15);
             localStorage.setItem(`lb_${mode}`, JSON.stringify(localLB));
 
             // Tentativo Supabase
-            if (supabaseClient) {
+            if (supabaseClient && isSupabaseConnected) {
                 try {
                     const { error } = await supabaseClient
                         .from(`AimSite${mode}LB`)
@@ -536,11 +566,13 @@
                         setTimeout(closeModal, 1800);
                         return;
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.error("Errore Supabase (CORS):", e);
+                }
             }
 
             statusEl.style.color = "#facc15";
-            statusEl.textContent = "💾 Salvato in locale (cloud non raggiungibile)";
+            statusEl.textContent = "💾 Salvato in locale (Cloud temporaneamente non disponibile)";
             UI.refreshLeaderboard(mode);
             setTimeout(closeModal, 2200);
         };
@@ -554,7 +586,7 @@
         // =============================================
         window.onload = function() {
             UI.init();
-            console.log('%cReaction Master Pro - Elite Suite v2.3 avviato correttamente', 'color:#6366f1; font-weight:bold; font-size:14px');
+            console.log('%cReaction Master Pro - Elite Suite v2.4 avviato correttamente', 'color:#6366f1; font-weight:bold; font-size:14px');
         };
     </script>
 </body>
